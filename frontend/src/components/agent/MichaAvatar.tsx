@@ -9,11 +9,11 @@ export default function MichaAvatar({ state, onClick }: Props) {
   return (
     <button
       onClick={onClick}
-      className={`relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-500/20 transition-transform hover:scale-105 ${
+      className={`relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 shadow-lg shadow-yellow-500/20 transition-transform hover:scale-105 ${
         state === 'thinking' ? 'animate-pulse' : ''
       }`}
     >
-      <span className="text-2xl font-bold text-white">M</span>
+      <span className="text-2xl font-bold text-white">E</span>
 
       {state === 'thinking' && (
         <span className="absolute -top-1 -right-1 flex h-4 w-4">
