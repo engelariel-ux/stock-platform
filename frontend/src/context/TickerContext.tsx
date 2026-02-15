@@ -3,11 +3,13 @@ import type { Ticker } from '../types/market'
 import { getQuote } from '../services/api'
 
 const DEFAULT_WATCHLIST: Ticker[] = [
-  { symbol: 'GLXY', name: 'Galaxy Digital', price: 0, change: 0, changePercent: 0 },
-  { symbol: 'HOOD', name: 'Robinhood Markets', price: 0, change: 0, changePercent: 0 },
-  { symbol: 'LAES', name: 'SEALSQ Corp', price: 0, change: 0, changePercent: 0 },
-  { symbol: 'AAPL', name: 'Apple Inc.', price: 0, change: 0, changePercent: 0 },
-  { symbol: 'MSFT', name: 'Microsoft Corp.', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'SPY', name: 'S&P 500 ETF', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'QQQ', name: 'Nasdaq 100 ETF', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'XLE', name: 'Energy Select Sector', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'VRT', name: 'Vertiv Holdings', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'ANET', name: 'Arista Networks', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'MAGS', name: 'Roundhill Mag 7 ETF', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'BTC-USD', name: 'Bitcoin USD', price: 0, change: 0, changePercent: 0 },
 ]
 
 interface TickerContextType {
@@ -19,7 +21,7 @@ interface TickerContextType {
 const TickerContext = createContext<TickerContextType | null>(null)
 
 export function TickerProvider({ children }: { children: ReactNode }) {
-  const [selectedTicker, setSelectedTicker] = useState('GLXY')
+  const [selectedTicker, setSelectedTicker] = useState('SPY')
   const [watchlist, setWatchlist] = useState<Ticker[]>(DEFAULT_WATCHLIST)
 
   const refreshQuotes = useCallback(async () => {
