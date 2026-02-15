@@ -8,8 +8,8 @@ export default function TopBar() {
   return (
     <header className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-6 py-3">
       <div className="flex items-center gap-3">
-        <TrendingUp className="h-6 w-6 text-emerald-400" />
-        <h1 className="text-lg font-bold text-white">Micha Stocks</h1>
+        <TrendingUp className="h-6 w-6 text-yellow-400" />
+        <h1 className="text-lg font-bold text-yellow-400">EngeluStocks</h1>
       </div>
 
       {ticker && (
