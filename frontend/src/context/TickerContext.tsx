@@ -1,12 +1,13 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import type { Ticker } from '../types/market'
+import { getQuote } from '../services/api'
 
 const DEFAULT_WATCHLIST: Ticker[] = [
-  { symbol: 'GLXY', name: 'Galaxy Digital', price: 26.84, change: 1.23, changePercent: 4.8 },
-  { symbol: 'HOOD', name: 'Robinhood Markets', price: 54.12, change: -0.87, changePercent: -1.58 },
-  { symbol: 'LAES', name: 'SEALSQ Corp', price: 3.42, change: 0.15, changePercent: 4.59 },
-  { symbol: 'AAPL', name: 'Apple Inc.', price: 232.50, change: 2.10, changePercent: 0.91 },
-  { symbol: 'MSFT', name: 'Microsoft Corp.', price: 415.80, change: -1.45, changePercent: -0.35 },
+  { symbol: 'GLXY', name: 'Galaxy Digital', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'HOOD', name: 'Robinhood Markets', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'LAES', name: 'SEALSQ Corp', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'AAPL', name: 'Apple Inc.', price: 0, change: 0, changePercent: 0 },
+  { symbol: 'MSFT', name: 'Microsoft Corp.', price: 0, change: 0, changePercent: 0 },
 ]
 
 interface TickerContextType {
@@ -19,7 +20,27 @@ const TickerContext = createContext<TickerContextType | null>(null)
 
 export function TickerProvider({ children }: { children: ReactNode }) {
   const [selectedTicker, setSelectedTicker] = useState('GLXY')
-  const [watchlist] = useState<Ticker[]>(DEFAULT_WATCHLIST)
+  const [watchlist, setWatchlist] = useState<Ticker[]>(DEFAULT_WATCHLIST)
+
+  const refreshQuotes = useCallback(async () => {
+    const updated = await Promise.all(
+      watchlist.map(async (t) => {
+        try {
+          const q = await getQuote(t.symbol)
+          return { ...t, price: q.price, change: q.change, changePercent: q.changePercent }
+        } catch {
+          return t
+        }
+      }),
+    )
+    setWatchlist(updated)
+  }, [watchlist])
+
+  useEffect(() => {
+    refreshQuotes()
+    const id = setInterval(refreshQuotes, 60_000)
+    return () => clearInterval(id)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <TickerContext.Provider value={{ selectedTicker, setSelectedTicker, watchlist }}>
