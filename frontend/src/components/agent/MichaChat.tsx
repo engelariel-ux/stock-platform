@@ -32,7 +32,7 @@ export default function MichaChat({ messages, agentState, onSend, onClose, ticke
       <div className="flex items-center justify-between border-b border-gray-800 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-          <span className="text-sm font-semibold text-white">Micha</span>
+          <span className="text-sm font-semibold text-yellow-400">Engelus</span>
           <span className="text-xs text-gray-500">· {ticker}</span>
         </div>
         <button onClick={onClose} className="text-gray-500 transition-colors hover:text-gray-300">
@@ -44,7 +44,7 @@ export default function MichaChat({ messages, agentState, onSend, onClose, ticke
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 && (
           <p className="text-center text-xs text-gray-600 mt-8">
-            Ask Micha anything about {ticker}
+            Ask Engelus anything about {ticker}
           </p>
         )}
         {messages.map((msg) => (
