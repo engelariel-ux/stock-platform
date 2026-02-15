@@ -1,18 +1,28 @@
 from fastapi import APIRouter, HTTPException, Query
 import yfinance as yf
+import cache
 
 router = APIRouter()
 
 RANGE_MAP = {
-    "1M": "1mo",
-    "3M": "3mo",
-    "6M": "6mo",
-    "1Y": "1y",
+    "1D": ("1d", "5m"),
+    "1W": ("5d", "15m"),
+    "1M": ("1mo", "1d"),
+    "3M": ("3mo", "1d"),
+    "6M": ("6mo", "1d"),
+    "1Y": ("1y", "1d"),
+    "5Y": ("5y", "1wk"),
+    "MAX": ("max", "1mo"),
 }
 
 
 @router.get("/quote/{symbol}")
 def get_quote(symbol: str):
+    cache_key = f"quote:{symbol.upper()}"
+    cached = cache.get(cache_key, ttl=60)
+    if cached:
+        return cached
+
     ticker = yf.Ticker(symbol)
     info = ticker.info
 
@@ -24,7 +34,7 @@ def get_quote(symbol: str):
     change = round(price - prev_close, 2)
     change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
 
-    return {
+    result = {
         "symbol": symbol.upper(),
         "price": price,
         "change": change,
@@ -33,21 +43,33 @@ def get_quote(symbol: str):
         "low": info.get("regularMarketDayLow", 0),
         "volume": info.get("regularMarketVolume", 0),
     }
+    cache.set(cache_key, result)
+    return result
 
 
 @router.get("/ohlc/{symbol}")
 def get_ohlc(symbol: str, range: str = Query("1M")):
-    period = RANGE_MAP.get(range, "1mo")
+    cache_key = f"ohlc:{symbol.upper()}:{range}"
+    cached = cache.get(cache_key, ttl=120)
+    if cached:
+        return cached
+
+    period, interval = RANGE_MAP.get(range, ("1mo", "1d"))
     ticker = yf.Ticker(symbol)
-    hist = ticker.history(period=period)
+    hist = ticker.history(period=period, interval=interval)
 
     if hist.empty:
         raise HTTPException(status_code=404, detail=f"No OHLC data for {symbol}")
 
     bars = []
+    is_intraday = interval in ("5m", "15m", "30m", "1h")
     for date, row in hist.iterrows():
+        if is_intraday:
+            time_str = int(date.timestamp())
+        else:
+            time_str = date.strftime("%Y-%m-%d")
         bars.append({
-            "time": date.strftime("%Y-%m-%d"),
+            "time": time_str,
             "open": round(row["Open"], 2),
             "high": round(row["High"], 2),
             "low": round(row["Low"], 2),
@@ -55,4 +77,6 @@ def get_ohlc(symbol: str, range: str = Query("1M")):
             "volume": int(row["Volume"]),
         })
 
-    return bars
+    result = {"bars": bars, "interval": interval}
+    cache.set(cache_key, result)
+    return result

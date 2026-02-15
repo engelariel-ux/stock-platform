@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { Ticker } from '../types/market'
 import { getQuote } from '../services/api'
 
+export type TabId = 'chart' | 'fundamentals' | 'news' | 'portfolio' | 'analysis'
+
 const DEFAULT_WATCHLIST: Ticker[] = [
   { symbol: 'SPY', name: 'S&P 500 ETF', price: 0, change: 0, changePercent: 0 },
   { symbol: 'QQQ', name: 'Nasdaq 100 ETF', price: 0, change: 0, changePercent: 0 },
@@ -16,6 +18,10 @@ interface TickerContextType {
   selectedTicker: string
   setSelectedTicker: (ticker: string) => void
   watchlist: Ticker[]
+  activeTab: TabId
+  setActiveTab: (tab: TabId) => void
+  chartRange: string
+  setChartRange: (range: string) => void
 }
 
 const TickerContext = createContext<TickerContextType | null>(null)
@@ -23,6 +29,8 @@ const TickerContext = createContext<TickerContextType | null>(null)
 export function TickerProvider({ children }: { children: ReactNode }) {
   const [selectedTicker, setSelectedTicker] = useState('SPY')
   const [watchlist, setWatchlist] = useState<Ticker[]>(DEFAULT_WATCHLIST)
+  const [activeTab, setActiveTab] = useState<TabId>('chart')
+  const [chartRange, setChartRange] = useState('1M')
 
   const refreshQuotes = useCallback(async () => {
     const updated = await Promise.all(
@@ -45,7 +53,11 @@ export function TickerProvider({ children }: { children: ReactNode }) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <TickerContext.Provider value={{ selectedTicker, setSelectedTicker, watchlist }}>
+    <TickerContext.Provider value={{
+      selectedTicker, setSelectedTicker, watchlist,
+      activeTab, setActiveTab,
+      chartRange, setChartRange,
+    }}>
       {children}
     </TickerContext.Provider>
   )

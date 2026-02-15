@@ -4,6 +4,7 @@ import { getOHLC } from '../services/api'
 
 export function useTickerData(symbol: string, range = '1M') {
   const [bars, setBars] = useState<Bar[]>([])
+  const [interval, setInterval_] = useState('1d')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -12,7 +13,10 @@ export function useTickerData(symbol: string, range = '1M') {
 
     getOHLC(symbol, range)
       .then((data) => {
-        if (!cancelled) setBars(data)
+        if (!cancelled) {
+          setBars(data.bars)
+          setInterval_(data.interval)
+        }
       })
       .catch((err) => {
         console.error('Failed to fetch OHLC:', err)
@@ -25,5 +29,5 @@ export function useTickerData(symbol: string, range = '1M') {
     return () => { cancelled = true }
   }, [symbol, range])
 
-  return { bars, loading }
+  return { bars, interval, loading }
 }
