@@ -67,6 +67,8 @@ def get_submissions(cik: int) -> dict | None:
 CONCEPT_LABELS = {
     "Revenues": "Revenue",
     "RevenueFromContractWithCustomerExcludingAssessedTax": "Revenue",
+    "RevenueFromContractWithCustomerIncludingAssessedTax": "Revenue",
+    "SalesRevenueNet": "Revenue",
     "NetIncomeLoss": "Net Income",
     "Assets": "Total Assets",
     "Liabilities": "Total Liabilities",
@@ -89,13 +91,8 @@ def extract_financials(facts: dict, period: str = "annual") -> dict:
     # Collect data for each concept
     rows_map: dict[str, dict[str, float]] = {}
     all_periods: set[str] = set()
-    seen_labels: set[str] = set()
 
     for concept, label in CONCEPT_LABELS.items():
-        if label in seen_labels:
-            # Skip duplicate labels (e.g. multiple Revenue concepts) if we already have data
-            if label in rows_map and rows_map[label]:
-                continue
         concept_data = us_gaap.get(concept)
         if not concept_data:
             continue
@@ -126,9 +123,13 @@ def extract_financials(facts: dict, period: str = "annual") -> dict:
                 period_values[key] = val
 
         if period_values:
-            rows_map[label] = period_values
-            all_periods.update(period_values.keys())
-            seen_labels.add(label)
+            # Merge with existing data — earlier concepts don't overwrite later ones
+            existing = rows_map.get(label, {})
+            for k, v in period_values.items():
+                if k not in existing:
+                    existing[k] = v
+            rows_map[label] = existing
+            all_periods.update(existing.keys())
 
     if not all_periods:
         return {"columns": [], "rows": []}
