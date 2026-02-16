@@ -91,7 +91,10 @@ export function TickerProvider({ children }: { children: ReactNode }) {
       watchlist.map(async (t) => {
         try {
           const q = await getQuote(t.symbol)
-          return { ...t, price: q.price, change: q.change, changePercent: q.changePercent }
+          return {
+            ...t, price: q.price, change: q.change, changePercent: q.changePercent,
+            extPrice: q.extPrice, extChange: q.extChange, extChangePercent: q.extChangePercent, extLabel: q.extLabel,
+          }
         } catch {
           return t
         }

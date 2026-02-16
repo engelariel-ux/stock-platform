@@ -4,6 +4,10 @@ export interface Ticker {
   price: number
   change: number
   changePercent: number
+  extPrice?: number | null
+  extChange?: number | null
+  extChangePercent?: number | null
+  extLabel?: string | null
 }
 
 export interface Bar {
@@ -23,4 +27,8 @@ export interface Quote {
   high: number
   low: number
   volume: number
+  extPrice?: number | null
+  extChange?: number | null
+  extChangePercent?: number | null
+  extLabel?: string | null
 }

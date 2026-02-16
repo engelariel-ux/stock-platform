@@ -57,6 +57,24 @@ def get_quote(symbol: str):
     change = round(price - prev_close, 2)
     change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
 
+    # Extended hours data
+    market_state = info.get("marketState", "")
+    ext_price = None
+    ext_change = None
+    ext_change_pct = None
+    ext_label = None
+
+    if market_state in ("PRE", "PREPRE") and info.get("preMarketPrice") is not None:
+        ext_price = round(info["preMarketPrice"], 2)
+        ext_change = round(info.get("preMarketChange", 0), 2)
+        ext_change_pct = round(info.get("preMarketChangePercent", 0), 2)
+        ext_label = "Pre-Market"
+    elif market_state in ("POST", "POSTPOST", "CLOSED") and info.get("postMarketPrice") is not None:
+        ext_price = round(info["postMarketPrice"], 2)
+        ext_change = round(info.get("postMarketChange", 0), 2)
+        ext_change_pct = round(info.get("postMarketChangePercent", 0), 2)
+        ext_label = "After Hours" if market_state == "POST" else "Post-Market"
+
     result = {
         "symbol": symbol.upper(),
         "price": price,
@@ -65,6 +83,10 @@ def get_quote(symbol: str):
         "high": info.get("regularMarketDayHigh", 0),
         "low": info.get("regularMarketDayLow", 0),
         "volume": info.get("regularMarketVolume", 0),
+        "extPrice": ext_price,
+        "extChange": ext_change,
+        "extChangePercent": ext_change_pct,
+        "extLabel": ext_label,
     }
     cache.set(cache_key, result)
     return result

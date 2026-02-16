@@ -33,6 +33,16 @@ export default function WatchlistItem({ ticker, active, onClick, onRemove }: Pro
             {ticker.change >= 0 ? '+' : ''}
             {ticker.changePercent.toFixed(2)}%
           </span>
+          {ticker.extPrice != null && (
+            <span
+              className={`text-[10px] font-mono ${
+                (ticker.extChange ?? 0) >= 0 ? 'text-emerald-400/60' : 'text-red-400/60'
+              }`}
+              title={ticker.extLabel ?? ''}
+            >
+              {ticker.extLabel?.[0]}: ${ticker.extPrice.toFixed(2)}
+            </span>
+          )}
         </div>
         <span
           onClick={(e) => { e.stopPropagation(); onRemove() }}

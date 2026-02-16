@@ -138,6 +138,18 @@ export default function TopBar() {
             {ticker.change >= 0 ? '+' : ''}
             {ticker.change.toFixed(2)} ({ticker.changePercent.toFixed(2)}%)
           </span>
+          {ticker.extPrice != null && ticker.extLabel && (
+            <div className="flex items-center gap-2 ml-2 pl-3 border-l border-gray-700">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase">{ticker.extLabel}</span>
+              <span className="text-sm font-mono text-gray-300">${ticker.extPrice.toFixed(2)}</span>
+              <span
+                className={`text-xs font-mono ${(ticker.extChange ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+              >
+                {(ticker.extChange ?? 0) >= 0 ? '+' : ''}
+                {(ticker.extChange ?? 0).toFixed(2)} ({(ticker.extChangePercent ?? 0).toFixed(2)}%)
+              </span>
+            </div>
+          )}
         </div>
       )}
     </header>
