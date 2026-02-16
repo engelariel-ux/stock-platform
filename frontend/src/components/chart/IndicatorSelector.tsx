@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 const INDICATORS = [
   { id: 'sma_20', label: 'SMA 20', category: 'Overlay' },
   { id: 'sma_50', label: 'SMA 50', category: 'Overlay' },
+  { id: 'sma_150', label: 'SMA 150', category: 'Overlay' },
   { id: 'sma_200', label: 'SMA 200', category: 'Overlay' },
   { id: 'ema_12', label: 'EMA 12', category: 'Overlay' },
   { id: 'ema_26', label: 'EMA 26', category: 'Overlay' },

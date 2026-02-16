@@ -7,6 +7,12 @@ import type { AnalystResult } from '../types/analysis'
 
 const BASE = '/api'
 
+export async function searchTicker(query: string): Promise<{ symbol: string; name: string; price: number; exchange: string }> {
+  const res = await fetch(`${BASE}/search/${encodeURIComponent(query)}`)
+  if (!res.ok) throw new Error(`No results for ${query}`)
+  return res.json()
+}
+
 export async function getQuote(symbol: string): Promise<Quote> {
   const res = await fetch(`${BASE}/quote/${symbol}`)
   if (!res.ok) throw new Error(`Failed to fetch quote for ${symbol}`)

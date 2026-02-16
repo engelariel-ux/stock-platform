@@ -16,6 +16,29 @@ RANGE_MAP = {
 }
 
 
+@router.get("/search/{query}")
+def search_ticker(query: str):
+    cache_key = f"search:{query.upper()}"
+    cached = cache.get(cache_key, ttl=300)
+    if cached:
+        return cached
+
+    ticker = yf.Ticker(query)
+    info = ticker.info
+
+    if not info or info.get("regularMarketPrice") is None:
+        raise HTTPException(status_code=404, detail=f"No ticker found for '{query}'")
+
+    result = {
+        "symbol": info.get("symbol", query.upper()),
+        "name": info.get("shortName") or info.get("longName") or query.upper(),
+        "price": info.get("regularMarketPrice", 0),
+        "exchange": info.get("exchange", ""),
+    }
+    cache.set(cache_key, result)
+    return result
+
+
 @router.get("/quote/{symbol}")
 def get_quote(symbol: str):
     cache_key = f"quote:{symbol.upper()}"

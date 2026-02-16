@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useTicker } from '../../context/TickerContext'
 import IndicatorSelector from './IndicatorSelector'
+import DrawingToolbar from './DrawingToolbar'
+import type { DrawingToolType } from './drawings/types'
 
 const RANGES = ['1D', '1W', '1M', '3M', '6M', '1Y', '5Y', 'MAX']
 const CHART_TYPES = ['Candlestick', 'Line', 'Area'] as const
@@ -11,9 +13,18 @@ interface Props {
   onChartTypeChange: (t: ChartType) => void
   activeIndicators: string[]
   onToggleIndicator: (ind: string) => void
+  activeDrawingTool: DrawingToolType
+  onSelectDrawingTool: (tool: DrawingToolType) => void
+  drawingCount: number
+  onClearDrawings: () => void
 }
 
-export default function ChartToolbar({ chartType, onChartTypeChange, activeIndicators, onToggleIndicator }: Props) {
+export default function ChartToolbar({
+  chartType, onChartTypeChange,
+  activeIndicators, onToggleIndicator,
+  activeDrawingTool, onSelectDrawingTool,
+  drawingCount, onClearDrawings,
+}: Props) {
   const { chartRange, setChartRange } = useTicker()
   const [showIndicators, setShowIndicators] = useState(false)
 
@@ -70,6 +81,15 @@ export default function ChartToolbar({ chartType, onChartTypeChange, activeIndic
           />
         )}
       </div>
+
+      <div className="w-px h-5 bg-gray-700 mx-1" />
+
+      <DrawingToolbar
+        activeTool={activeDrawingTool}
+        onSelectTool={onSelectDrawingTool}
+        drawingCount={drawingCount}
+        onClearAll={onClearDrawings}
+      />
 
       {activeIndicators.length > 0 && (
         <>

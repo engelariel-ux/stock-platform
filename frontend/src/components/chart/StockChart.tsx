@@ -3,6 +3,8 @@ import {
   createChart,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesPrimitive,
+  type Time,
   ColorType,
   CandlestickSeries,
   LineSeries,
@@ -13,10 +15,15 @@ import { useTicker } from '../../context/TickerContext'
 import { useTickerData } from '../../hooks/useTickerData'
 import { useIndicators } from '../../hooks/useIndicators'
 import ChartToolbar, { type ChartType } from './ChartToolbar'
+import type { DrawingToolType, DrawingPoint } from './drawings/types'
+import { TrendLinePrimitive } from './drawings/TrendLine'
+import { HorizontalLinePrimitive } from './drawings/HorizontalLine'
+import { FibRetracementPrimitive } from './drawings/FibRetracement'
 
 const OVERLAY_COLORS: Record<string, string> = {
   sma_20: '#f59e0b',
   sma_50: '#3b82f6',
+  sma_150: '#f97316',
   sma_200: '#ef4444',
   ema_12: '#a78bfa',
   ema_26: '#34d399',
@@ -50,6 +57,7 @@ export default function StockChart() {
   const mainChartRef = useRef<HTMLDivElement>(null)
   const subChartsRef = useRef<HTMLDivElement>(null)
   const chartApiRef = useRef<IChartApi | null>(null)
+  const mainSeriesRef = useRef<ISeriesApi<any> | null>(null)
   const subChartApisRef = useRef<Map<string, IChartApi>>(new Map())
 
   const { selectedTicker, chartRange } = useTicker()
@@ -57,6 +65,17 @@ export default function StockChart() {
 
   const [chartType, setChartType] = useState<ChartType>('Candlestick')
   const [activeIndicators, setActiveIndicators] = useState<string[]>([])
+
+  // Drawing state
+  const [drawingTool, setDrawingTool] = useState<DrawingToolType>(null)
+  const [pendingPoint, setPendingPoint] = useState<DrawingPoint | null>(null)
+  const [drawings, setDrawings] = useState<ISeriesPrimitive<Time>[]>([])
+  const drawingToolRef = useRef<DrawingToolType>(null)
+  const pendingPointRef = useRef<DrawingPoint | null>(null)
+
+  // Keep refs in sync
+  useEffect(() => { drawingToolRef.current = drawingTool }, [drawingTool])
+  useEffect(() => { pendingPointRef.current = pendingPoint }, [pendingPoint])
 
   const overlayIndicators = activeIndicators.filter((i) => !SUB_INDICATORS.includes(i))
   const subIndicators = activeIndicators.filter((i) => SUB_INDICATORS.includes(i))
@@ -67,6 +86,30 @@ export default function StockChart() {
     setActiveIndicators((prev) =>
       prev.includes(ind) ? prev.filter((i) => i !== ind) : [...prev, ind]
     )
+  }, [])
+
+  const clearDrawings = useCallback(() => {
+    const series = mainSeriesRef.current
+    if (series) {
+      drawings.forEach((d) => {
+        try { series.detachPrimitive(d) } catch { /* already detached */ }
+      })
+    }
+    setDrawings([])
+    setPendingPoint(null)
+    setDrawingTool(null)
+  }, [drawings])
+
+  // Cancel drawing on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPendingPoint(null)
+        setDrawingTool(null)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
   }, [])
 
   const isIntraday = ['5m', '15m', '30m', '1h'].includes(interval)
@@ -113,6 +156,13 @@ export default function StockChart() {
       mainSeries.setData(bars.map((b) => ({ time: b.time, value: b.close })))
     }
 
+    mainSeriesRef.current = mainSeries
+
+    // Re-attach existing drawings to new series
+    drawings.forEach((d) => {
+      try { mainSeries.attachPrimitive(d) } catch { /* ignore */ }
+    })
+
     // Overlay indicators
     for (const ind of overlayIndicators) {
       const indData = indicatorData[ind]
@@ -132,6 +182,46 @@ export default function StockChart() {
       }
     }
 
+    // Drawing click handler
+    chart.subscribeClick((param) => {
+      const tool = drawingToolRef.current
+      if (!tool) return
+
+      const time = param.time as Time | undefined
+      if (!time) return
+
+      const price = mainSeries.coordinateToPrice(param.point?.y ?? 0)
+      if (price === null) return
+
+      const point: DrawingPoint = { time, price: price as number }
+
+      if (tool === 'hline') {
+        const primitive = new HorizontalLinePrimitive(point.price)
+        mainSeries.attachPrimitive(primitive)
+        setDrawings((prev) => [...prev, primitive])
+      } else if (tool === 'trendline') {
+        const pending = pendingPointRef.current
+        if (!pending) {
+          setPendingPoint(point)
+        } else {
+          const primitive = new TrendLinePrimitive(pending, point)
+          mainSeries.attachPrimitive(primitive)
+          setDrawings((prev) => [...prev, primitive])
+          setPendingPoint(null)
+        }
+      } else if (tool === 'fib') {
+        const pending = pendingPointRef.current
+        if (!pending) {
+          setPendingPoint(point)
+        } else {
+          const primitive = new FibRetracementPrimitive(pending, point)
+          mainSeries.attachPrimitive(primitive)
+          setDrawings((prev) => [...prev, primitive])
+          setPendingPoint(null)
+        }
+      }
+    })
+
     chart.timeScale().fitContent()
     chartApiRef.current = chart
 
@@ -148,6 +238,7 @@ export default function StockChart() {
       window.removeEventListener('resize', handleResize)
       chart.remove()
       chartApiRef.current = null
+      mainSeriesRef.current = null
     }
   }, [bars, chartType, overlayIndicators.join(','), JSON.stringify(indicatorData), isIntraday, subIndicators.length])
 
@@ -182,7 +273,6 @@ export default function StockChart() {
       if (ind === 'rsi') {
         const series = subChart.addSeries(LineSeries, { color: '#a78bfa', lineWidth: 2 })
         series.setData(indData.map((d: any) => ({ time: d.time, value: d.value })))
-        // Overbought/oversold reference lines - just using the RSI series data range
       } else if (ind === 'macd') {
         const macdLine = subChart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 2 })
         const signalLine = subChart.addSeries(LineSeries, { color: '#ef4444', lineWidth: 1 })
@@ -246,8 +336,20 @@ export default function StockChart() {
         onChartTypeChange={setChartType}
         activeIndicators={activeIndicators}
         onToggleIndicator={toggleIndicator}
+        activeDrawingTool={drawingTool}
+        onSelectDrawingTool={setDrawingTool}
+        drawingCount={drawings.length}
+        onClearDrawings={clearDrawings}
       />
-      <div ref={mainChartRef} className="overflow-hidden" />
+      {drawingTool && (
+        <div className="px-4 py-1 text-xs text-yellow-400 bg-yellow-400/10 border-b border-yellow-400/20">
+          {drawingTool === 'hline' && 'Click on chart to place horizontal line'}
+          {drawingTool === 'trendline' && (pendingPoint ? 'Click second point to complete trend line' : 'Click first point for trend line')}
+          {drawingTool === 'fib' && (pendingPoint ? 'Click second point to complete Fibonacci' : 'Click first point for Fibonacci retracement')}
+          {' '}— Press Escape to cancel
+        </div>
+      )}
+      <div ref={mainChartRef} className={`overflow-hidden ${drawingTool ? 'cursor-crosshair' : ''}`} />
       <div ref={subChartsRef} className="overflow-hidden" />
     </div>
   )
