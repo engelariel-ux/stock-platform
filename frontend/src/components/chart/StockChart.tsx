@@ -112,6 +112,12 @@ export default function StockChart() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  // Detect indicators with no data (e.g. SMA 150 on 1M range)
+  const emptyIndicators = activeIndicators.filter((ind) => {
+    const d = indicatorData[ind]
+    return d !== undefined && Array.isArray(d) && d.length === 0
+  })
+
   const isIntraday = ['5m', '15m', '30m', '1h'].includes(interval)
 
   // Main chart
@@ -341,6 +347,11 @@ export default function StockChart() {
         drawingCount={drawings.length}
         onClearDrawings={clearDrawings}
       />
+      {emptyIndicators.length > 0 && (
+        <div className="px-4 py-1 text-xs text-amber-400 bg-amber-400/10 border-b border-amber-400/20">
+          {emptyIndicators.join(', ')} — not enough data for current range. Try a longer range (1Y+).
+        </div>
+      )}
       {drawingTool && (
         <div className="px-4 py-1 text-xs text-yellow-400 bg-yellow-400/10 border-b border-yellow-400/20">
           {drawingTool === 'hline' && 'Click on chart to place horizontal line'}

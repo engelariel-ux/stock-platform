@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { TrendingUp, Search, X } from 'lucide-react'
+import { TrendingUp, Search, X, Plus } from 'lucide-react'
 import { useTicker } from '../../context/TickerContext'
 import { searchTicker } from '../../services/api'
 
 export default function TopBar() {
-  const { selectedTicker, setSelectedTicker, watchlist } = useTicker()
+  const { selectedTicker, setSelectedTicker, watchlist, addToWatchlist } = useTicker()
   const ticker = watchlist.find((t) => t.symbol === selectedTicker)
 
   const [query, setQuery] = useState('')
@@ -98,16 +98,30 @@ export default function TopBar() {
               <div className="px-3 py-2 text-xs text-red-400">{error}</div>
             )}
             {result && !searching && (
-              <button
-                onClick={() => selectResult(result.symbol)}
-                className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-800 transition-colors"
-              >
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between px-3 py-2 hover:bg-gray-800 transition-colors">
+                <button
+                  onClick={() => selectResult(result.symbol)}
+                  className="flex items-center gap-2 flex-1"
+                >
                   <span className="text-sm font-semibold text-white">{result.symbol}</span>
-                  <span className="text-xs text-gray-400">{result.name}</span>
-                </div>
-                <span className="text-xs text-gray-300 font-mono">${result.price.toFixed(2)}</span>
-              </button>
+                  <span className="text-xs text-gray-400 truncate">{result.name}</span>
+                  <span className="text-xs text-gray-300 font-mono ml-auto">${result.price.toFixed(2)}</span>
+                </button>
+                {!watchlist.some((t) => t.symbol === result.symbol) && (
+                  <button
+                    onClick={() => {
+                      addToWatchlist(result.symbol, result.name)
+                      setQuery('')
+                      setShowDropdown(false)
+                      setResult(null)
+                    }}
+                    title="Add to watchlist"
+                    className="ml-2 p-1 rounded text-gray-400 hover:text-yellow-400 hover:bg-gray-700 transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
