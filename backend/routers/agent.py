@@ -3,6 +3,7 @@ import uuid
 import time
 
 import anthropic
+import numpy as np
 import yfinance as yf
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -75,14 +76,23 @@ ANALYST_PERSONAS = {
     },
     "micha": {
         "name": "מיכה סטוקס",
-        "style": "ניתוח טכני ופונדמנטלי",
+        "style": "ניתוח טכני מומחה",
         "prompt": (
-            "אתה מיכה סטוקס, אנליסט מניות ישראלי מוביל. "
-            "נתח את המניה מזווית טכנית ופונדמנטלית. "
-            "התמקד ברמות תמיכה והתנגדות, מומנטום, יחסי P/E, צמיחת הכנסות, ותזרים מזומנים. "
-            "תן המלצה ברורה: קנייה, החזקה או מכירה. "
-            "כתוב את כל התשובה בעברית."
+            "אתה מיכה סטוקס, מומחה ניתוח טכני ישראלי מוביל עם ניסיון של 20 שנה בשוק ההון. "
+            "אתה מתמחה בזיהוי דפוסים טכניים (patterns) ובמתן נקודות כניסה מדויקות.\n\n"
+            "הניתוח שלך חייב לכלול:\n"
+            "1. **מיקום ביחס ל-SMA 150**: האם המניה מעל, נוגעת, או מתחת ל-SMA 150? "
+            "אם מתחת — זה סימן שלילי ולא זמן טוב לקנות. אם מעל ונוגעת — יכול להיות הזדמנות.\n"
+            "2. **דפוסים טכניים**: חפש דפוסים כמו Cup and Handle, Head and Shoulders, "
+            "Double Bottom/Top, Bull Flag, Ascending Triangle, Breakout וכו'.\n"
+            "3. **נקודת כניסה (Entry Point)**: תן מחיר כניסה מדויק ותסביר למה.\n"
+            "4. **סטופ לוס (Stop Loss)**: תן רמת סטופ לוס מדויקת עם אחוז ההפסד מנקודת הכניסה.\n"
+            "5. **יעדי מחיר (Price Targets)**: תן 2-3 יעדי מחיר.\n"
+            "6. **רמות תמיכה והתנגדות מפתח**.\n"
+            "7. **מומנטום ונפח מסחר**: האם הנפח תומך במגמה?\n\n"
+            "כתוב את כל התשובה בעברית. היה ישיר ופרקטי."
         ),
+        "extra_data": True,
     },
     "dalio": {
         "name": "Ray Dalio",
@@ -179,6 +189,49 @@ def analyze_stock(req: AnalyzeRequest):
 
     data_context = f"Market Data:\n{quote_context}\n{overview}"
 
+    # Fetch technical data for Micha
+    technical_context = ""
+    if "micha" in req.analysts:
+        try:
+            ticker_obj = yf.Ticker(req.ticker)
+            hist = ticker_obj.history(period="1y", interval="1d")
+            if not hist.empty:
+                close = hist["Close"].values
+                # SMA 150
+                sma_150 = float(np.nanmean(close[-150:])) if len(close) >= 150 else None
+                sma_50 = float(np.nanmean(close[-50:])) if len(close) >= 50 else None
+                sma_20 = float(np.nanmean(close[-20:])) if len(close) >= 20 else None
+                current = float(close[-1])
+
+                technical_context = "\nTechnical Data:\n"
+                technical_context += f"  Current Price: ${current:.2f}\n"
+                if sma_20:
+                    technical_context += f"  SMA 20: ${sma_20:.2f} ({'above' if current > sma_20 else 'below'})\n"
+                if sma_50:
+                    technical_context += f"  SMA 50: ${sma_50:.2f} ({'above' if current > sma_50 else 'below'})\n"
+                if sma_150:
+                    diff_pct = ((current - sma_150) / sma_150) * 100
+                    position = "above" if current > sma_150 else "below"
+                    technical_context += f"  SMA 150: ${sma_150:.2f} ({position} by {abs(diff_pct):.1f}%)\n"
+
+                # Recent price action (last 20 days)
+                recent = close[-20:]
+                high_20 = float(np.max(recent))
+                low_20 = float(np.min(recent))
+                technical_context += f"  20-Day High: ${high_20:.2f}\n"
+                technical_context += f"  20-Day Low: ${low_20:.2f}\n"
+
+                # Volume trend
+                vol = hist["Volume"].values
+                avg_vol_20 = float(np.nanmean(vol[-20:]))
+                avg_vol_50 = float(np.nanmean(vol[-50:])) if len(vol) >= 50 else avg_vol_20
+                technical_context += f"  Avg Volume 20D: {int(avg_vol_20):,}\n"
+                technical_context += f"  Avg Volume 50D: {int(avg_vol_50):,}\n"
+                vol_ratio = avg_vol_20 / avg_vol_50 if avg_vol_50 > 0 else 1
+                technical_context += f"  Volume Trend: {'increasing' if vol_ratio > 1.1 else 'decreasing' if vol_ratio < 0.9 else 'stable'}\n"
+        except Exception:
+            pass
+
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     results = []
 
@@ -187,11 +240,21 @@ def analyze_stock(req: AnalyzeRequest):
         if not persona:
             continue
 
-        system = f"{persona['prompt']}\n\n{data_context}\n\nKeep your analysis concise (under 200 words). Give a clear verdict: Buy, Hold, or Sell."
+        ctx = data_context
+        max_tokens = 512
+        word_limit = "under 200 words"
+
+        # Micha gets extra data and more room
+        if analyst_key == "micha":
+            ctx = data_context + technical_context
+            max_tokens = 1024
+            word_limit = "under 400 words"
+
+        system = f"{persona['prompt']}\n\n{ctx}\n\nKeep your analysis concise ({word_limit}). Give a clear verdict: Buy, Hold, or Sell."
 
         response = client.messages.create(
             model="claude-sonnet-4-5-20250929",
-            max_tokens=512,
+            max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": f"Analyze {req.ticker.upper()} for me."}],
         )
