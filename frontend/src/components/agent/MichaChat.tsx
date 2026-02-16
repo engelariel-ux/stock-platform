@@ -58,6 +58,7 @@ export default function MichaChat({ messages, agentState, onSend, onClose, ticke
                   ? 'bg-emerald-600 text-white'
                   : 'bg-gray-800 text-gray-200'
               }`}
+              dir={/[\u0590-\u05FF]/.test(msg.content) ? 'rtl' : 'ltr'}
             >
               {msg.content}
             </div>
