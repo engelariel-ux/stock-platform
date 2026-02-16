@@ -8,7 +8,7 @@ export default function AnalysisPanel() {
   const { selectedTicker } = useTicker()
   const { results, loading, error, analyze } = useAnalysis()
   const [selectedAnalysts, setSelectedAnalysts] = useState<string[]>([
-    'buffett', 'wood', 'lee', 'lynch', 'dalio',
+    'buffett', 'wood', 'lee', 'micha', 'dalio',
   ])
 
   const handleAnalyze = () => {

@@ -19,7 +19,7 @@ class AskRequest(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     ticker: str
-    analysts: list[str] = ["buffett", "wood", "lee", "lynch", "dalio"]
+    analysts: list[str] = ["buffett", "wood", "lee", "micha", "dalio"]
 
 
 def _fetch_quote(symbol: str) -> dict:
@@ -73,13 +73,15 @@ ANALYST_PERSONAS = {
             "Be data-driven and constructively bullish where appropriate."
         ),
     },
-    "lynch": {
-        "name": "Peter Lynch",
-        "style": "Growth at Reasonable Price",
+    "micha": {
+        "name": "מיכה סטוקס",
+        "style": "ניתוח טכני ופונדמנטלי",
         "prompt": (
-            "You are Peter Lynch. Analyze this stock using GARP principles. "
-            "Focus on PEG ratio, earnings growth, whether an average person can understand the business, "
-            "and classify it (slow grower, stalwart, fast grower, cyclical, turnaround, asset play)."
+            "אתה מיכה סטוקס, אנליסט מניות ישראלי מוביל. "
+            "נתח את המניה מזווית טכנית ופונדמנטלית. "
+            "התמקד ברמות תמיכה והתנגדות, מומנטום, יחסי P/E, צמיחת הכנסות, ותזרים מזומנים. "
+            "תן המלצה ברורה: קנייה, החזקה או מכירה. "
+            "כתוב את כל התשובה בעברית."
         ),
     },
     "dalio": {

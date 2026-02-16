@@ -2,7 +2,7 @@ const ANALYSTS = [
   { id: 'buffett', name: 'Warren Buffett', style: 'Value Investing' },
   { id: 'wood', name: 'Cathie Wood', style: 'Disruptive Innovation' },
   { id: 'lee', name: 'Tom Lee', style: 'Macro Strategy' },
-  { id: 'lynch', name: 'Peter Lynch', style: 'GARP' },
+  { id: 'micha', name: 'מיכה סטוקס', style: 'ניתוח טכני ופונדמנטלי' },
   { id: 'dalio', name: 'Ray Dalio', style: 'Global Macro' },
 ]
 

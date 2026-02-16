@@ -139,7 +139,7 @@ export async function deleteHolding(ticker: string): Promise<void> {
 // Analysis
 export async function getAnalysis(
   ticker: string,
-  analysts: string[] = ['buffett', 'wood', 'lee', 'lynch', 'dalio'],
+  analysts: string[] = ['buffett', 'wood', 'lee', 'micha', 'dalio'],
 ): Promise<AnalystResult[]> {
   const res = await fetch(`${BASE}/agent/analyze`, {
     method: 'POST',
