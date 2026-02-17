@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import type { Ticker } from '../types/market'
 import { getQuote } from '../services/api'
 
@@ -50,6 +50,8 @@ export function TickerProvider({ children }: { children: ReactNode }) {
   const [watchlist, setWatchlist] = useState<Ticker[]>(loadWatchlist)
   const [activeTab, setActiveTab] = useState<TabId>('chart')
   const [chartRange, setChartRange] = useState('1M')
+  const watchlistRef = useRef(watchlist)
+  watchlistRef.current = watchlist
 
   const addToWatchlist = useCallback((symbol: string, name: string) => {
     setWatchlist((prev) => {
@@ -62,7 +64,10 @@ export function TickerProvider({ children }: { children: ReactNode }) {
     getQuote(symbol).then((q) => {
       setWatchlist((prev) => {
         const updated = prev.map((t) =>
-          t.symbol === symbol ? { ...t, price: q.price, change: q.change, changePercent: q.changePercent } : t
+          t.symbol === symbol ? {
+            ...t, price: q.price, change: q.change, changePercent: q.changePercent,
+            extPrice: q.extPrice, extChange: q.extChange, extChangePercent: q.extChangePercent, extLabel: q.extLabel,
+          } : t
         )
         saveWatchlist(updated)
         return updated
@@ -74,21 +79,17 @@ export function TickerProvider({ children }: { children: ReactNode }) {
     setWatchlist((prev) => {
       const updated = prev.filter((t) => t.symbol !== symbol)
       saveWatchlist(updated)
+      if (selectedTicker === symbol) {
+        setSelectedTicker(updated.length > 0 ? updated[0].symbol : 'SPY')
+      }
       return updated
     })
-    // If removing the selected ticker, switch to first remaining
-    setSelectedTicker((current) => {
-      if (current === symbol) {
-        const remaining = watchlist.filter((t) => t.symbol !== symbol)
-        return remaining.length > 0 ? remaining[0].symbol : 'SPY'
-      }
-      return current
-    })
-  }, [watchlist])
+  }, [selectedTicker])
 
   const refreshQuotes = useCallback(async () => {
+    const current = watchlistRef.current
     const updated = await Promise.all(
-      watchlist.map(async (t) => {
+      current.map(async (t) => {
         try {
           const q = await getQuote(t.symbol)
           return {
@@ -102,13 +103,13 @@ export function TickerProvider({ children }: { children: ReactNode }) {
     )
     setWatchlist(updated)
     saveWatchlist(updated)
-  }, [watchlist])
+  }, [])
 
   useEffect(() => {
     refreshQuotes()
     const id = setInterval(refreshQuotes, 60_000)
     return () => clearInterval(id)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <TickerContext.Provider value={{
