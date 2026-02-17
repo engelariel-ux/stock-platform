@@ -1,7 +1,6 @@
 import os
 import uuid
 import time
-import datetime
 import logging
 
 import anthropic
@@ -151,14 +150,16 @@ def _fetch_quote(symbol: str) -> dict:
     # Fallback: fetch extended hours data from intraday history if info didn't have it
     if "preMarketPrice" not in result or "postMarketPrice" not in result:
         try:
-            ext_hist = ticker.history(period="5d", interval="1m", prepost=True)
+            ext_hist = ticker.history(period="5d", interval="5m", prepost=True)
             if not ext_hist.empty:
-                ext_hist.index = ext_hist.index.tz_localize(None) if ext_hist.index.tz is None else ext_hist.index.tz_convert("America/New_York")
-                today = ext_hist.index[-1].date()
-                today_data = ext_hist[ext_hist.index.date == today]
+                # Convert to NY timezone, then strip tz for reliable filtering
+                if ext_hist.index.tz is not None:
+                    ext_hist.index = ext_hist.index.tz_convert("America/New_York").tz_localize(None)
+                latest_date = ext_hist.index[-1].date()
+                today_data = ext_hist[ext_hist.index.normalize() == str(latest_date)]
 
                 if not today_data.empty:
-                    # Pre-market: 4:00 AM - 9:30 AM ET
+                    # Pre-market: 4:00 AM - 9:29 AM ET
                     pre_market = today_data.between_time("04:00", "09:29")
                     if not pre_market.empty and "preMarketPrice" not in result:
                         pm_last = float(pre_market["Close"].iloc[-1])
@@ -173,6 +174,7 @@ def _fetch_quote(symbol: str) -> dict:
                         result["preMarketHigh"] = pm_high
                         result["preMarketLow"] = pm_low
                         result["preMarketVolume"] = pm_vol
+                        logger.info(f"Pre-market data for {symbol}: ${pm_last}")
 
                     # Post-market: 4:00 PM - 8:00 PM ET
                     post_market = today_data.between_time("16:00", "19:59")
@@ -184,8 +186,12 @@ def _fetch_quote(symbol: str) -> dict:
                         result["postMarketChange"] = am_change
                         result["postMarketChangePercent"] = am_change_pct
                         result["postMarketVolume"] = int(post_market["Volume"].sum())
+                        logger.info(f"Post-market data for {symbol}: ${am_last}")
+
+                if "preMarketPrice" not in result:
+                    logger.info(f"No pre-market data found for {symbol} on {latest_date}")
         except Exception as e:
-            logger.debug(f"Extended hours fetch for {symbol}: {e}")
+            logger.warning(f"Extended hours fetch failed for {symbol}: {e}")
 
     return result
 
@@ -291,8 +297,11 @@ SYSTEM_PROMPT = (
     "when available. You also have historical OHLC price data, technical indicators, and can identify chart "
     "patterns such as Cup and Handle, Head and Shoulders, Double Top/Bottom, Bull/Bear Flags, Triangles, "
     "Wedges, Breakouts, and more. Analyze the price action data to answer questions about patterns and trends. "
-    "When pre-market or post-market data is included in the market data below, use it to answer questions "
-    "about extended hours trading. "
+    "IMPORTANT: The market data below contains ALL the data you have. If pre-market or post-market data "
+    "is listed, use it directly. If it is NOT listed, it means the market is not currently in that session "
+    "or no extended hours trading has occurred yet — simply tell the user that pre/post-market data is not "
+    "available right now instead of saying you don't have access to it. Never say 'I don't have access to' "
+    "any type of data — you DO have access, the data just may not exist for the current session. "
     "Be helpful, professional, and data-driven. Keep responses focused and under 300 words. "
     "Reply in the same language the user writes in — if they write in Hebrew, respond in Hebrew; "
     "if they write in English, respond in English."
