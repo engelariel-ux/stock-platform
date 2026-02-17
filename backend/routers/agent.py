@@ -1,6 +1,7 @@
 import os
 import uuid
 import time
+import datetime
 import logging
 
 import anthropic
@@ -129,7 +130,7 @@ def _fetch_quote(symbol: str) -> dict:
         "volume": info.get("regularMarketVolume", 0),
     }
 
-    # Pre-market data
+    # Pre-market data from info (available during pre-market session)
     pre_price = info.get("preMarketPrice")
     if pre_price:
         pre_change = info.get("preMarketChange", 0)
@@ -138,7 +139,7 @@ def _fetch_quote(symbol: str) -> dict:
         result["preMarketChange"] = round(pre_change, 2) if pre_change else 0
         result["preMarketChangePercent"] = round(pre_change_pct * 100, 2) if pre_change_pct else 0
 
-    # Post-market data
+    # Post-market data from info (available during post-market session)
     post_price = info.get("postMarketPrice")
     if post_price:
         post_change = info.get("postMarketChange", 0)
@@ -146,6 +147,45 @@ def _fetch_quote(symbol: str) -> dict:
         result["postMarketPrice"] = post_price
         result["postMarketChange"] = round(post_change, 2) if post_change else 0
         result["postMarketChangePercent"] = round(post_change_pct * 100, 2) if post_change_pct else 0
+
+    # Fallback: fetch extended hours data from intraday history if info didn't have it
+    if "preMarketPrice" not in result or "postMarketPrice" not in result:
+        try:
+            ext_hist = ticker.history(period="5d", interval="1m", prepost=True)
+            if not ext_hist.empty:
+                ext_hist.index = ext_hist.index.tz_localize(None) if ext_hist.index.tz is None else ext_hist.index.tz_convert("America/New_York")
+                today = ext_hist.index[-1].date()
+                today_data = ext_hist[ext_hist.index.date == today]
+
+                if not today_data.empty:
+                    # Pre-market: 4:00 AM - 9:30 AM ET
+                    pre_market = today_data.between_time("04:00", "09:29")
+                    if not pre_market.empty and "preMarketPrice" not in result:
+                        pm_last = float(pre_market["Close"].iloc[-1])
+                        pm_high = float(pre_market["High"].max())
+                        pm_low = float(pre_market["Low"].min())
+                        pm_vol = int(pre_market["Volume"].sum())
+                        pm_change = round(pm_last - prev_close, 2)
+                        pm_change_pct = round((pm_change / prev_close) * 100, 2) if prev_close else 0
+                        result["preMarketPrice"] = pm_last
+                        result["preMarketChange"] = pm_change
+                        result["preMarketChangePercent"] = pm_change_pct
+                        result["preMarketHigh"] = pm_high
+                        result["preMarketLow"] = pm_low
+                        result["preMarketVolume"] = pm_vol
+
+                    # Post-market: 4:00 PM - 8:00 PM ET
+                    post_market = today_data.between_time("16:00", "19:59")
+                    if not post_market.empty and "postMarketPrice" not in result:
+                        am_last = float(post_market["Close"].iloc[-1])
+                        am_change = round(am_last - price, 2)
+                        am_change_pct = round((am_change / price) * 100, 2) if price else 0
+                        result["postMarketPrice"] = am_last
+                        result["postMarketChange"] = am_change
+                        result["postMarketChangePercent"] = am_change_pct
+                        result["postMarketVolume"] = int(post_market["Volume"].sum())
+        except Exception as e:
+            logger.debug(f"Extended hours fetch for {symbol}: {e}")
 
     return result
 
@@ -168,12 +208,18 @@ def _format_quote_context(quote: dict, ticker_symbol: str) -> str:
             f"  Pre-Market Price: ${quote['preMarketPrice']} "
             f"({quote['preMarketChange']:+.2f}, {quote['preMarketChangePercent']:+.2f}%)"
         )
+        if "preMarketHigh" in quote:
+            lines.append(f"  Pre-Market High: ${quote['preMarketHigh']:.2f}")
+            lines.append(f"  Pre-Market Low: ${quote['preMarketLow']:.2f}")
+            lines.append(f"  Pre-Market Volume: {quote['preMarketVolume']:,}")
 
     if "postMarketPrice" in quote:
         lines.append(
             f"  Post-Market Price: ${quote['postMarketPrice']} "
             f"({quote['postMarketChange']:+.2f}, {quote['postMarketChangePercent']:+.2f}%)"
         )
+        if "postMarketVolume" in quote:
+            lines.append(f"  Post-Market Volume: {quote['postMarketVolume']:,}")
 
     return "\n".join(lines)
 
