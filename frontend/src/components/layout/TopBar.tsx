@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { TrendingUp, Search, X } from 'lucide-react'
 import { useTicker } from '../../context/TickerContext'
-import { searchTicker } from '../../services/api'
+import { searchTicker, type SearchResult } from '../../services/api'
 
 export default function TopBar() {
   const { selectedTicker, setSelectedTicker, watchlist, addToWatchlist } = useTicker()
@@ -9,7 +9,7 @@ export default function TopBar() {
 
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
-  const [result, setResult] = useState<{ symbol: string; name: string; price: number } | null>(null)
+  const [results, setResults] = useState<SearchResult[]>([])
   const [error, setError] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -28,7 +28,7 @@ export default function TopBar() {
   const handleSearch = (value: string) => {
     setQuery(value)
     setError('')
-    setResult(null)
+    setResults([])
 
     if (debounceRef.current) clearTimeout(debounceRef.current)
 
@@ -43,10 +43,10 @@ export default function TopBar() {
       setShowDropdown(true)
       try {
         const res = await searchTicker(trimmed)
-        setResult(res)
+        setResults(res)
         setError('')
       } catch {
-        setResult(null)
+        setResults([])
         setError(`No results for "${trimmed}"`)
       } finally {
         setSearching(false)
@@ -54,14 +54,14 @@ export default function TopBar() {
     }, 400)
   }
 
-  const selectResult = (symbol: string, name?: string) => {
-    if (name && !watchlist.some((t) => t.symbol === symbol)) {
+  const selectResult = (symbol: string, name: string) => {
+    if (!watchlist.some((t) => t.symbol === symbol)) {
       addToWatchlist(symbol, name)
     }
     setSelectedTicker(symbol)
     setQuery('')
     setShowDropdown(false)
-    setResult(null)
+    setResults([])
   }
 
   return (
@@ -79,44 +79,50 @@ export default function TopBar() {
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && result) selectResult(result.symbol, result.name)
+              if (e.key === 'Enter' && results.length > 0) selectResult(results[0].symbol, results[0].name)
               if (e.key === 'Escape') { setShowDropdown(false); setQuery('') }
             }}
-            placeholder="Search ticker..."
-            className="bg-transparent text-sm text-white placeholder-gray-500 outline-none w-48"
+            placeholder="Search ticker or company..."
+            className="bg-transparent text-sm text-white placeholder-gray-500 outline-none w-56"
           />
           {query && (
-            <button onClick={() => { setQuery(''); setShowDropdown(false); setResult(null) }}>
+            <button onClick={() => { setQuery(''); setShowDropdown(false); setResults([]) }}>
               <X className="h-3.5 w-3.5 text-gray-500 hover:text-gray-300" />
             </button>
           )}
         </div>
 
         {showDropdown && (
-          <div className="absolute top-full mt-1 left-0 right-0 z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+          <div className="absolute top-full mt-1 left-0 z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden w-80 max-h-72 overflow-y-auto">
             {searching && (
               <div className="px-3 py-2 text-xs text-gray-400">Searching...</div>
             )}
             {error && (
               <div className="px-3 py-2 text-xs text-red-400">{error}</div>
             )}
-            {result && !searching && (
-              <button
-                onClick={() => selectResult(result.symbol, result.name)}
-                className="flex items-center justify-between w-full px-3 py-2 hover:bg-gray-800 transition-colors"
-              >
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="text-sm font-semibold text-white">{result.symbol}</span>
-                  <span className="text-xs text-gray-400 truncate">{result.name}</span>
-                  <span className="text-xs text-gray-300 font-mono ml-auto">${result.price.toFixed(2)}</span>
-                </div>
-                {!watchlist.some((t) => t.symbol === result.symbol) ? (
-                  <span className="ml-2 text-[10px] text-yellow-400/70">+ Add</span>
-                ) : (
-                  <span className="ml-2 text-[10px] text-gray-600">In list</span>
-                )}
-              </button>
-            )}
+            {results.map((r) => {
+              const inList = watchlist.some((t) => t.symbol === r.symbol)
+              return (
+                <button
+                  key={r.symbol}
+                  onClick={() => selectResult(r.symbol, r.name)}
+                  className="flex items-center w-full px-3 py-2 hover:bg-gray-800 transition-colors border-b border-gray-800/50 last:border-0"
+                >
+                  <div className="flex flex-col items-start flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">{r.symbol}</span>
+                      <span className="text-[10px] text-gray-500 uppercase">{r.exchange}</span>
+                    </div>
+                    <span className="text-xs text-gray-400 truncate w-full text-left">{r.name}</span>
+                  </div>
+                  {inList ? (
+                    <span className="ml-2 text-[10px] text-gray-600 shrink-0">In list</span>
+                  ) : (
+                    <span className="ml-2 text-[10px] text-yellow-400/70 shrink-0">+ Add</span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         )}
       </div>

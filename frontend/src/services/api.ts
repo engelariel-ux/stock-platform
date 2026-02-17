@@ -7,7 +7,14 @@ import type { AnalystResult } from '../types/analysis'
 
 const BASE = '/api'
 
-export async function searchTicker(query: string): Promise<{ symbol: string; name: string; price: number; exchange: string }> {
+export interface SearchResult {
+  symbol: string
+  name: string
+  exchange: string
+  type: string
+}
+
+export async function searchTicker(query: string): Promise<SearchResult[]> {
   const res = await fetch(`${BASE}/search/${encodeURIComponent(query)}`)
   if (!res.ok) throw new Error(`No results for ${query}`)
   return res.json()

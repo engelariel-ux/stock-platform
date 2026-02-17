@@ -18,25 +18,54 @@ RANGE_MAP = {
 
 @router.get("/search/{query}")
 def search_ticker(query: str):
-    cache_key = f"search:{query.upper()}"
+    cache_key = f"search:{query.strip().upper()}"
     cached = cache.get(cache_key, ttl=300)
     if cached:
         return cached
 
-    ticker = yf.Ticker(query)
-    info = ticker.info
+    import requests
 
-    if not info or info.get("regularMarketPrice") is None:
-        raise HTTPException(status_code=404, detail=f"No ticker found for '{query}'")
-
-    result = {
-        "symbol": info.get("symbol", query.upper()),
-        "name": info.get("shortName") or info.get("longName") or query.upper(),
-        "price": info.get("regularMarketPrice", 0),
-        "exchange": info.get("exchange", ""),
+    # Use Yahoo Finance search API for fuzzy name/ticker matching
+    url = "https://query2.finance.yahoo.com/v1/finance/search"
+    params = {
+        "q": query.strip(),
+        "quotesCount": 8,
+        "newsCount": 0,
+        "listsCount": 0,
+        "enableFuzzyQuery": True,
+        "quotesQueryId": "tss_match_phrase_query",
     }
-    cache.set(cache_key, result)
-    return result
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="Search service unavailable")
+
+    quotes = data.get("quotes", [])
+    if not quotes:
+        raise HTTPException(status_code=404, detail=f"No results for '{query}'")
+
+    results = []
+    for q in quotes:
+        # Only include equities, ETFs, crypto — skip futures, options, etc.
+        qtype = q.get("quoteType", "")
+        if qtype not in ("EQUITY", "ETF", "CRYPTOCURRENCY", "MUTUALFUND"):
+            continue
+        results.append({
+            "symbol": q.get("symbol", ""),
+            "name": q.get("shortname") or q.get("longname") or q.get("symbol", ""),
+            "exchange": q.get("exchDisp") or q.get("exchange", ""),
+            "type": qtype,
+        })
+
+    if not results:
+        raise HTTPException(status_code=404, detail=f"No results for '{query}'")
+
+    cache.set(cache_key, results)
+    return results
 
 
 @router.get("/quote/{symbol}")
