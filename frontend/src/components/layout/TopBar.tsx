@@ -101,21 +101,21 @@ export default function TopBar() {
               <div className="px-3 py-2 text-xs text-red-400">{error}</div>
             )}
             {result && !searching && (
-              <div className="flex items-center justify-between px-3 py-2 hover:bg-gray-800 transition-colors">
-                <button
-                  onClick={() => selectResult(result.symbol, result.name)}
-                  className="flex items-center gap-2 flex-1"
-                >
+              <button
+                onClick={() => selectResult(result.symbol, result.name)}
+                className="flex items-center justify-between w-full px-3 py-2 hover:bg-gray-800 transition-colors"
+              >
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="text-sm font-semibold text-white">{result.symbol}</span>
                   <span className="text-xs text-gray-400 truncate">{result.name}</span>
                   <span className="text-xs text-gray-300 font-mono ml-auto">${result.price.toFixed(2)}</span>
-                </button>
+                </div>
                 {!watchlist.some((t) => t.symbol === result.symbol) ? (
                   <span className="ml-2 text-[10px] text-yellow-400/70">+ Add</span>
                 ) : (
                   <span className="ml-2 text-[10px] text-gray-600">In list</span>
                 )}
-              </div>
+              </button>
             )}
           </div>
         )}
