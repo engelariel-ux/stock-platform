@@ -1,10 +1,13 @@
 import os
 import uuid
 import time
+import logging
 
 import anthropic
 import numpy as np
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -23,6 +26,87 @@ class AnalyzeRequest(BaseModel):
     analysts: list[str] = ["buffett", "wood", "lee", "micha", "dalio"]
 
 
+def _fetch_chart_data(symbol: str) -> str:
+    """Fetch historical OHLC data and technical indicators for chart pattern analysis."""
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="1y", interval="1d")
+        if hist.empty:
+            return ""
+
+        close = hist["Close"].values
+        high = hist["High"].values
+        low = hist["Low"].values
+        volume = hist["Volume"].values
+
+        # --- Technical Indicators ---
+        lines = ["\nChart & Technical Analysis Data:"]
+
+        # SMAs
+        for period in [20, 50, 150]:
+            if len(close) >= period:
+                sma = float(np.nanmean(close[-period:]))
+                pos = "above" if close[-1] > sma else "below"
+                diff = ((close[-1] - sma) / sma) * 100
+                lines.append(f"  SMA {period}: ${sma:.2f} ({pos} by {abs(diff):.1f}%)")
+
+        # RSI (14-period)
+        if len(close) >= 15:
+            deltas = np.diff(close[-15:])
+            gains = np.where(deltas > 0, deltas, 0)
+            losses = np.where(deltas < 0, -deltas, 0)
+            avg_gain = np.mean(gains)
+            avg_loss = np.mean(losses)
+            if avg_loss > 0:
+                rs = avg_gain / avg_loss
+                rsi = 100 - (100 / (1 + rs))
+            else:
+                rsi = 100
+            lines.append(f"  RSI (14): {rsi:.1f}")
+
+        # 52-week and 20-day ranges
+        if len(close) >= 252:
+            lines.append(f"  52W High: ${float(np.max(high[-252:])):.2f}")
+            lines.append(f"  52W Low: ${float(np.min(low[-252:])):.2f}")
+        high_20 = float(np.max(high[-20:]))
+        low_20 = float(np.min(low[-20:]))
+        lines.append(f"  20-Day High: ${high_20:.2f}")
+        lines.append(f"  20-Day Low: ${low_20:.2f}")
+
+        # Volume trend
+        avg_vol_20 = float(np.nanmean(volume[-20:]))
+        avg_vol_50 = float(np.nanmean(volume[-50:])) if len(volume) >= 50 else avg_vol_20
+        vol_ratio = avg_vol_20 / avg_vol_50 if avg_vol_50 > 0 else 1
+        lines.append(f"  Avg Volume 20D: {int(avg_vol_20):,}")
+        lines.append(f"  Volume Trend: {'increasing' if vol_ratio > 1.1 else 'decreasing' if vol_ratio < 0.9 else 'stable'}")
+
+        # --- Weekly OHLC summary (last 6 months ~ 26 weeks) for pattern recognition ---
+        lines.append("\nWeekly OHLC (last 6 months):")
+        weekly = ticker.history(period="6mo", interval="1wk")
+        if not weekly.empty:
+            for date, row in weekly.iterrows():
+                d = date.strftime("%Y-%m-%d")
+                lines.append(
+                    f"  {d}: O={row['Open']:.2f} H={row['High']:.2f} "
+                    f"L={row['Low']:.2f} C={row['Close']:.2f} V={int(row['Volume']):,}"
+                )
+
+        # --- Daily OHLC (last 30 days) for recent patterns ---
+        lines.append("\nDaily OHLC (last 30 trading days):")
+        recent = hist.tail(30)
+        for date, row in recent.iterrows():
+            d = date.strftime("%Y-%m-%d")
+            lines.append(
+                f"  {d}: O={row['Open']:.2f} H={row['High']:.2f} "
+                f"L={row['Low']:.2f} C={row['Close']:.2f} V={int(row['Volume']):,}"
+            )
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error(f"Error fetching chart data for {symbol}: {e}")
+        return ""
+
+
 def _fetch_quote(symbol: str) -> dict:
     ticker = yf.Ticker(symbol)
     info = ticker.info
@@ -35,7 +119,7 @@ def _fetch_quote(symbol: str) -> dict:
     change = round(price - prev_close, 2)
     change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
 
-    return {
+    result = {
         "symbol": symbol.upper(),
         "price": price,
         "change": change,
@@ -44,6 +128,54 @@ def _fetch_quote(symbol: str) -> dict:
         "low": info.get("regularMarketDayLow", 0),
         "volume": info.get("regularMarketVolume", 0),
     }
+
+    # Pre-market data
+    pre_price = info.get("preMarketPrice")
+    if pre_price:
+        pre_change = info.get("preMarketChange", 0)
+        pre_change_pct = info.get("preMarketChangePercent", 0)
+        result["preMarketPrice"] = pre_price
+        result["preMarketChange"] = round(pre_change, 2) if pre_change else 0
+        result["preMarketChangePercent"] = round(pre_change_pct * 100, 2) if pre_change_pct else 0
+
+    # Post-market data
+    post_price = info.get("postMarketPrice")
+    if post_price:
+        post_change = info.get("postMarketChange", 0)
+        post_change_pct = info.get("postMarketChangePercent", 0)
+        result["postMarketPrice"] = post_price
+        result["postMarketChange"] = round(post_change, 2) if post_change else 0
+        result["postMarketChangePercent"] = round(post_change_pct * 100, 2) if post_change_pct else 0
+
+    return result
+
+
+def _format_quote_context(quote: dict, ticker_symbol: str) -> str:
+    if not quote:
+        return f"Could not fetch live data for {ticker_symbol.upper()}."
+
+    lines = [
+        f"Live quote for {quote['symbol']}:",
+        f"  Price: ${quote['price']}",
+        f"  Change: {quote['change']} ({quote['changePercent']}%)",
+        f"  Day High: ${quote['high']}",
+        f"  Day Low: ${quote['low']}",
+        f"  Volume: {quote['volume']:,}",
+    ]
+
+    if "preMarketPrice" in quote:
+        lines.append(
+            f"  Pre-Market Price: ${quote['preMarketPrice']} "
+            f"({quote['preMarketChange']:+.2f}, {quote['preMarketChangePercent']:+.2f}%)"
+        )
+
+    if "postMarketPrice" in quote:
+        lines.append(
+            f"  Post-Market Price: ${quote['postMarketPrice']} "
+            f"({quote['postMarketChange']:+.2f}, {quote['postMarketChangePercent']:+.2f}%)"
+        )
+
+    return "\n".join(lines)
 
 
 ANALYST_PERSONAS = {
@@ -108,8 +240,14 @@ ANALYST_PERSONAS = {
 
 SYSTEM_PROMPT = (
     "You are Engelus, the AI stock analyst assistant for EngeluStocks. "
-    "You provide concise, insightful analysis of stocks based on the live quote data provided. "
-    "Be helpful, professional, and data-driven. Keep responses focused and under 200 words. "
+    "You provide concise, insightful analysis of stocks based on the market data and chart data provided. "
+    "You have access to real-time market data including regular hours, pre-market, and post-market prices "
+    "when available. You also have historical OHLC price data, technical indicators, and can identify chart "
+    "patterns such as Cup and Handle, Head and Shoulders, Double Top/Bottom, Bull/Bear Flags, Triangles, "
+    "Wedges, Breakouts, and more. Analyze the price action data to answer questions about patterns and trends. "
+    "When pre-market or post-market data is included in the market data below, use it to answer questions "
+    "about extended hours trading. "
+    "Be helpful, professional, and data-driven. Keep responses focused and under 300 words. "
     "Reply in the same language the user writes in — if they write in Hebrew, respond in Hebrew; "
     "if they write in English, respond in English."
 )
@@ -121,24 +259,17 @@ def ask_agent(req: AskRequest):
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY is not configured")
 
     quote = _fetch_quote(req.ticker)
-    if quote:
-        quote_context = (
-            f"Live quote for {quote['symbol']}:\n"
-            f"  Price: ${quote['price']}\n"
-            f"  Change: {quote['change']} ({quote['changePercent']}%)\n"
-            f"  Day High: ${quote['high']}\n"
-            f"  Day Low: ${quote['low']}\n"
-            f"  Volume: {quote['volume']:,}\n"
-        )
-    else:
-        quote_context = f"Could not fetch live data for {req.ticker.upper()}."
+    quote_context = _format_quote_context(quote, req.ticker)
 
-    system = f"{SYSTEM_PROMPT}\n\nCurrent market data:\n{quote_context}"
+    chart_data = _fetch_chart_data(req.ticker)
+    logger.info(f"Chart data for {req.ticker}: {len(chart_data)} chars")
+
+    system = f"{SYSTEM_PROMPT}\n\nCurrent market data:\n{quote_context}{chart_data}"
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
         model="claude-sonnet-4-5-20250929",
-        max_tokens=1024,
+        max_tokens=2048,
         system=system,
         messages=[{"role": "user", "content": req.message}],
     )
@@ -159,17 +290,7 @@ def analyze_stock(req: AnalyzeRequest):
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY is not configured")
 
     quote = _fetch_quote(req.ticker)
-    if quote:
-        quote_context = (
-            f"Live quote for {quote['symbol']}:\n"
-            f"  Price: ${quote['price']}\n"
-            f"  Change: {quote['change']} ({quote['changePercent']}%)\n"
-            f"  Day High: ${quote['high']}\n"
-            f"  Day Low: ${quote['low']}\n"
-            f"  Volume: {quote['volume']:,}\n"
-        )
-    else:
-        quote_context = f"Could not fetch live data for {req.ticker.upper()}."
+    quote_context = _format_quote_context(quote, req.ticker)
 
     # Fetch overview info
     try:
