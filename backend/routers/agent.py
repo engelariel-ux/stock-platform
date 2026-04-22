@@ -323,7 +323,7 @@ def ask_agent(req: AskRequest):
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
-        model="claude-sonnet-4-5-20250929",
+        model="claude-sonnet-4-6",
         max_tokens=2048,
         system=system,
         messages=[{"role": "user", "content": req.message}],
@@ -429,7 +429,7 @@ def analyze_stock(req: AnalyzeRequest):
         system = f"{persona['prompt']}\n\n{ctx}\n\nKeep your analysis concise ({word_limit}). Give a clear verdict: Buy, Hold, or Sell."
 
         response = client.messages.create(
-            model="claude-sonnet-4-5-20250929",
+            model="claude-sonnet-4-6",
             max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": f"Analyze {req.ticker.upper()} for me."}],
